@@ -57,7 +57,7 @@ export function appendMessage(authorName, messageText, badgeColor) {
         borderRadius: '4px',
         padding:      '0.5vh 0.8vw',
         color:        '#fff',
-        fontSize:     '1.4vw',
+        fontSize:     '2.8vw',
         lineHeight:   '1.4',
         opacity:      '1',
         transition:   'opacity 1s ease',

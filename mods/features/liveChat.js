@@ -70,6 +70,12 @@ async function apiPost(endpoint, body) {
 
 async function startForVideo(videoId, startSecs) {
     startSecs = startSecs || 0;
+    // Cancel any in-flight fetch before starting a new one.
+    // This prevents duplicate fetches when startForVideo is called twice
+    // in quick succession (e.g. init race with pushState hook).
+    fetchGeneration++;
+    if (pollTimeout) { clearTimeout(pollTimeout); pollTimeout = null; }
+    const gen = fetchGeneration;
     console.log('[LiveChat] fetching v1/next for', videoId, 'startSecs=' + startSecs);
     try {
         const json = await apiPost('next', { videoId });
@@ -82,7 +88,7 @@ async function startForVideo(videoId, startSecs) {
         isLive = badge?.isLive === true;
         fetchStartSecs = startSecs;
         console.log('[LiveChat] continuation found, isLive=' + isLive + ' startSecs=' + startSecs);
-        fetchChat(token, fetchGeneration);
+        fetchChat(token, gen);
     } catch (e) {
         console.warn('[LiveChat] v1/next error:', e.message);
     }
@@ -312,7 +318,7 @@ function onVideoChange(videoId) {
     stopAll();
     replayQueue = [];
     listenersAttached = false;
-    removeOverlay();
+    createOverlay(chatVisible);
     startForVideo(videoId);
     attachVideoListeners();
 }
