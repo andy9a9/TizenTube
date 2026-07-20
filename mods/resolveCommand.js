@@ -224,8 +224,6 @@ function customAction(action, parameters) {
         case 'TT_TOGGLE_CHAT': {
             const nowVisible = !isLiveChatVisible();
             setLiveChatVisible(nowVisible);
-            const btn = document.querySelector('yt-button-container[aria-label="Toggle Chat"]');
-            if (btn) btn.setAttribute('aria-pressed', String(nowVisible));
             break;
         }
     }

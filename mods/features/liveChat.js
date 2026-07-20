@@ -15,22 +15,25 @@ import {
 
 const QUEUE_AHEAD_MS = 300;
 
-// WEB client context — this is what desktop YouTube uses.
-// It always receives liveChatRenderer in v1/next responses.
+// Always use the WEB desktop client for live chat API calls.
+// The TV client (TVHTML5) does NOT include liveChatRenderer in v1/next responses,
+// so we must impersonate the desktop web client regardless of the host page.
 const WEB_CLIENT = {
-    clientName:    'WEB',
-    clientVersion: '2.20240101.00.00',
-    hl:            'en',
+    clientName: 'WEB',
+    clientVersion: '2.20260715.01.00',
+    hl: 'en',
+    gl: 'US',
 };
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
-let replayQueue  = [];
-let isLive       = false;
-let rafId        = null;
-let pollTimeout  = null;
-let lastVideoId     = null;
-let chatVisible     = false;
+let replayQueue = [];
+let isLive = false;
+let rafId = null;
+let pollTimeout = null;
+let lastVideoId = null;
+let chatVisible = false;
+let chatAvailable = false;
 let fetchGeneration = 0;
 let listenersAttached = false;
 
@@ -54,9 +57,9 @@ async function apiPost(endpoint, body) {
     const res = await fetch(
         `https://www.youtube.com/youtubei/v1/${endpoint}?key=${key}&prettyPrint=false`,
         {
-            method:  'POST',
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
+            body: JSON.stringify({
                 context: { client: WEB_CLIENT },
                 ...body,
             }),
@@ -81,11 +84,13 @@ async function startForVideo(videoId, startSecs) {
         const json = await apiPost('next', { videoId });
         const token = findLiveChatContinuation(json);
         if (!token) {
+            chatAvailable = false;
             console.log('[LiveChat] no liveChatRenderer in v1/next — video has no chat');
             return;
         }
-        const badge = json?.videoPrimaryInfoRenderer?.viewCount?.videoViewCountRenderer;
-        isLive = badge?.isLive === true;
+        chatAvailable = true;
+        // Detect live vs replay: search for isLive indicator in response
+        isLive = JSON.stringify(json).includes('"isLive":true');
         fetchStartSecs = startSecs;
         console.log('[LiveChat] continuation found, isLive=' + isLive + ' startSecs=' + startSecs);
         fetchChat(token, gen);
@@ -101,9 +106,11 @@ function findLiveChatContinuation(obj, depth) {
     if (obj.liveChatRenderer) {
         const conts = obj.liveChatRenderer.continuations;
         if (Array.isArray(conts) && conts.length) {
-            return conts[0].reloadContinuationData?.continuation
-                || conts[0].timedContinuationData?.continuation
-                || conts[0].invalidationContinuationData?.continuation
+            const cont = conts[0];
+            return cont.reloadContinuationData?.continuation
+                || cont.timedContinuationData?.continuation
+                || cont.invalidationContinuationData?.continuation
+                || cont.liveChatReplayContinuationData?.continuation
                 || null;
         }
     }
@@ -153,6 +160,13 @@ async function fetchChat(continuation, gen) {
             pollTimeout = setTimeout(() => fetchChat(nextToken, gen), 50);
         }
     } catch (e) {
+        // If 400, the isLive guess was wrong — flip and retry with the other endpoint
+        if (e.message.includes('400')) {
+            isLive = !isLive;
+            console.log('[LiveChat] got 400, switching to isLive=' + isLive);
+            pollTimeout = setTimeout(() => fetchChat(continuation, gen), 100);
+            return;
+        }
         console.warn('[LiveChat] fetchChat error:', e.message, '— retrying in 5s');
         pollTimeout = setTimeout(() => fetchChat(continuation, gen), 5000);
     }
@@ -176,19 +190,21 @@ function processChat(json) {
             || item.liveChatPaidMessageRenderer;
         if (!renderer) continue;
 
-        const authorName  = extractText(renderer.authorName);
-        const messageText = extractRuns(renderer.message?.runs);
-        if (!authorName || !messageText) continue;
+        const authorName = extractText(renderer.authorName);
+        const messageParts = extractMessageParts(renderer.message?.runs);
+        const messageText = messageParts.map(p => p.text || '').join('');
+        if (!authorName || !messageParts.length) continue;
 
-        const badgeColor = extractBadgeColor(renderer.authorBadges);
+        const badgeInfo = extractBadgeInfo(renderer.authorBadges);
+        const authorPhotoUrl = extractAuthorPhotoUrl(renderer.authorPhoto);
 
         if (isLive) {
-            appendMessage(authorName, messageText, badgeColor);
+            appendMessage(authorName, messageText, badgeInfo, messageParts, authorPhotoUrl);
         } else {
             const offsetMs = parseInt(
                 action?.replayChatItemAction?.videoOffsetTimeMsec || '0', 10
             );
-            replayQueue.push({ offsetMs, authorName, messageText, badgeColor });
+            replayQueue.push({ offsetMs, authorName, messageText, badgeInfo, messageParts, authorPhotoUrl });
         }
         count++;
     }
@@ -226,13 +242,58 @@ function extractRuns(runs) {
     }).join('');
 }
 
-function extractBadgeColor(badges) {
-    if (!badges || !badges.length) return '';
-    const type = badges[0]?.liveChatAuthorBadgeRenderer?.icon?.iconType || '';
-    if (type === 'MODERATOR')      return 'ffd600';
-    if (type === 'OWNER')          return 'ff4444';
-    if (type.startsWith('MEMBER')) return '22bb66';
-    return '';
+function extractMessageParts(runs) {
+    if (!Array.isArray(runs)) return [];
+    const parts = [];
+    for (const r of runs) {
+        if (r?.text) {
+            parts.push({ type: 'text', text: r.text });
+            continue;
+        }
+
+        const emoji = r?.emoji;
+        if (!emoji) continue;
+
+        const thumbs = emoji.image?.thumbnails;
+        const thumb = Array.isArray(thumbs) && thumbs.length ? thumbs[thumbs.length - 1] : null;
+        const text = emoji.shortcuts?.[0] || emoji.emojiId || '';
+        parts.push({
+            type: 'emoji',
+            text,
+            url: thumb?.url || '',
+        });
+    }
+    return parts;
+}
+
+function extractBadgeInfo(badges) {
+    if (!Array.isArray(badges) || !badges.length) return null;
+    const renderer = badges[0]?.liveChatAuthorBadgeRenderer;
+    if (!renderer) return null;
+
+    const type = renderer.icon?.iconType || '';
+    const thumbs = renderer.customThumbnail?.thumbnails
+        || renderer.icon?.thumbnails
+        || [];
+    const thumb = Array.isArray(thumbs) && thumbs.length ? thumbs[thumbs.length - 1] : null;
+
+    let color = '';
+    if (type === 'MODERATOR') color = 'ffd600';
+    else if (type === 'OWNER') color = 'ff4444';
+    else if (type.startsWith('MEMBER')) color = '22bb66';
+
+    return {
+        type,
+        color,
+        tooltip: extractText(renderer.tooltip),
+        url: thumb?.url || '',
+    };
+}
+
+function extractAuthorPhotoUrl(authorPhoto) {
+    const thumbs = authorPhoto?.thumbnails;
+    const thumb = Array.isArray(thumbs) && thumbs.length ? thumbs[thumbs.length - 1] : null;
+    return thumb?.url || '';
 }
 
 // ─── Replay sync loop ─────────────────────────────────────────────────────────
@@ -243,13 +304,14 @@ function startReplayLoop() {
         const video = document.querySelector('video');
         if (!video) return;
         const nowMs = video.currentTime * 1000;
-        if (Math.floor(nowMs / 10000) !== Math.floor(Math.max(0, nowMs - 250) / 10000)) {            console.log('[LiveChat] nowMs=' + nowMs.toFixed(0)
+        if (Math.floor(nowMs / 10000) !== Math.floor(Math.max(0, nowMs - 250) / 10000)) {
+            console.log('[LiveChat] nowMs=' + nowMs.toFixed(0)
                 + ' queueLen=' + replayQueue.length
                 + ' firstOffsetMs=' + (replayQueue[0]?.offsetMs ?? 'empty'));
         }
         while (replayQueue.length && replayQueue[0].offsetMs <= nowMs + QUEUE_AHEAD_MS) {
-            const { authorName, messageText, badgeColor } = replayQueue.shift();
-            appendMessage(authorName, messageText, badgeColor);
+            const { authorName, messageText, badgeInfo, messageParts, authorPhotoUrl } = replayQueue.shift();
+            appendMessage(authorName, messageText, badgeInfo, messageParts, authorPhotoUrl);
         }
     }, 250);
     // Store so we can cancel on navigation
@@ -298,7 +360,7 @@ function attachVideoListeners() {
 
 function stopAll() {
     fetchGeneration++;
-    if (rafId)       { clearInterval(rafId); rafId = null; }
+    if (rafId) { clearInterval(rafId); rafId = null; }
     if (pollTimeout) { clearTimeout(pollTimeout); pollTimeout = null; }
 }
 
@@ -317,6 +379,7 @@ function onVideoChange(videoId) {
     console.log('[LiveChat] video changed to', videoId);
     stopAll();
     replayQueue = [];
+    chatAvailable = false;
     listenersAttached = false;
     createOverlay(chatVisible);
     startForVideo(videoId);
@@ -330,7 +393,7 @@ function observeNavigation() {
     });
     // Also hook pushState as fallback
     const orig = history.pushState.bind(history);
-    history.pushState = function(...args) {
+    history.pushState = function (...args) {
         orig(...args);
         onVideoChange(getCurrentVideoId());
     };
@@ -363,6 +426,10 @@ export function setLiveChatVisible(visible) {
 
 export function isLiveChatVisible() {
     return chatVisible;
+}
+
+export function hasLiveChat() {
+    return chatAvailable;
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

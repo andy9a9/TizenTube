@@ -3,7 +3,7 @@
 
 export const OVERLAY_ID = 'tt-live-chat-overlay';
 
-const MAX_MESSAGES = 50;
+const MAX_MESSAGES = 10;
 const FADE_AFTER_MS = 20000;
 
 export function createOverlay(visible) {
@@ -12,22 +12,8 @@ export function createOverlay(visible) {
 
     el = document.createElement('div');
     el.id = OVERLAY_ID;
-    Object.assign(el.style, {
-        position:       'fixed',
-        right:          '2vw',
-        bottom:         '7vh',
-        width:          '28vw',
-        height:         '50vh',
-        overflowY:      'hidden',
-        display:        visible ? 'flex' : 'none',
-        flexDirection:  'column',
-        justifyContent: 'flex-end',
-        gap:            '4px',
-        zIndex:         '99999',
-        pointerEvents:  'none',
-        fontFamily:     'sans-serif',
-        boxSizing:      'border-box',
-    });
+    el.className = 'tt-live-chat-overlay';
+    el.style.display = visible ? 'flex' : 'none';
 
     document.body.appendChild(el);
     return el;
@@ -45,65 +31,92 @@ export function setOverlayVisible(visible) {
     if (!visible) {
         while (el.firstChild) el.removeChild(el.firstChild);
     }
+    updateChatToggleIcon(visible);
 }
 
-export function appendMessage(authorName, messageText, badgeColor) {
+function updateChatToggleIcon(visible) {
+    const btn = document.querySelector('yt-button-container[aria-label="Toggle Chat"]');
+    if (!btn) return;
+    const icon = btn.querySelector('yt-icon');
+    if (!icon) return;
+    const iconMap = Object.values(window._yttv).find(a => a instanceof Map && a.has('CHECK_BOX'));
+    if (!iconMap) return;
+    const checkedClass = iconMap.get('CHECK_BOX');
+    const uncheckedClass = iconMap.get('CHECK_BOX_OUTLINE_BLANK');
+    if (!checkedClass || !uncheckedClass) return;
+    icon.classList.remove(visible ? uncheckedClass : checkedClass);
+    icon.classList.add(visible ? checkedClass : uncheckedClass);
+}
+
+function createAuthorBadgeNode(badgeInfo, authorPhotoUrl) {
+    if (authorPhotoUrl) {
+        const img = document.createElement('img');
+        img.className = 'tt-live-chat-author-photo';
+        img.src = authorPhotoUrl;
+        img.alt = '';
+        return img;
+    }
+
+    const color = '#' + (badgeInfo?.color || 'aaaaaa');
+
+    const dot = document.createElement('span');
+    dot.className = 'tt-live-chat-badge-dot';
+    dot.style.backgroundColor = color;
+    return dot;
+}
+
+export function appendMessage(authorName, messageText, badgeInfo, messageParts, authorPhotoUrl) {
     const overlay = document.getElementById(OVERLAY_ID);
     if (!overlay) return;
 
     const row = document.createElement('div');
-    Object.assign(row.style, {
-        background:   'rgba(0,0,0,0.65)',
-        borderRadius: '4px',
-        padding:      '0.5vh 0.8vw',
-        color:        '#fff',
-        fontSize:     '2.8vw',
-        lineHeight:   '1.4',
-        opacity:      '1',
-        transition:   'opacity 1s ease',
-        wordBreak:    'break-word',
-        width:        '100%',
-        boxSizing:    'border-box',
-        flexShrink:   '0',
-    });
+    row.className = 'tt-live-chat-row';
 
-    // Build DOM nodes manually — no innerHTML (blocked by Trusted Types CSP)
-    const authorColor = badgeColor || 'aaaaaa';
+    // Header line: avatar + bold username
+    const header = document.createElement('div');
+    header.className = 'tt-live-chat-header';
+
+    const badge = createAuthorBadgeNode(badgeInfo, authorPhotoUrl);
+    if (badge) header.appendChild(badge);
 
     const authorSpan = document.createElement('span');
-    Object.assign(authorSpan.style, {
-        fontWeight:  'bold',
-        color:       '#' + authorColor,
-        marginRight: '4px',
-    });
+    authorSpan.className = 'tt-live-chat-author';
+    const authorColor = badgeInfo?.color || 'aaaaaa';
+    authorSpan.style.color = '#' + authorColor;
+    authorSpan.textContent = authorName;
+    header.appendChild(authorSpan);
 
-    if (badgeColor) {
-        const badge = document.createElement('span');
-        Object.assign(badge.style, {
-            display:       'inline-block',
-            width:         '0.7vw',
-            height:        '0.7vw',
-            borderRadius:  '50%',
-            background:    '#' + badgeColor,
-            marginRight:   '5px',
-            verticalAlign: 'middle',
-        });
-        authorSpan.appendChild(badge);
+    // Message body
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'tt-live-chat-message';
+
+    if (Array.isArray(messageParts) && messageParts.length) {
+        for (const part of messageParts) {
+            if (!part) continue;
+            if (part.type === 'emoji' && part.url) {
+                const img = document.createElement('img');
+                img.className = 'tt-live-chat-emoji';
+                img.src = part.url;
+                img.alt = part.text || '';
+                messageDiv.appendChild(img);
+            } else {
+                messageDiv.appendChild(document.createTextNode(part.text || ''));
+            }
+        }
+    } else {
+        messageDiv.textContent = messageText;
     }
 
-    authorSpan.appendChild(document.createTextNode(authorName + ':'));
-
-    const messageSpan = document.createElement('span');
-    messageSpan.textContent = ' ' + messageText;
-
-    row.appendChild(authorSpan);
-    row.appendChild(messageSpan);
+    row.appendChild(header);
+    row.appendChild(messageDiv);
 
     overlay.appendChild(row);
+    // Scroll to bottom so messages push up as whole units
+    overlay.scrollTop = overlay.scrollHeight;
     while (overlay.children.length > MAX_MESSAGES) overlay.removeChild(overlay.firstChild);
 
     setTimeout(() => {
-        row.style.opacity = '0';
+        row.classList.add('tt-live-chat-row-hidden');
         setTimeout(() => row.remove(), 1000);
     }, FADE_AFTER_MS);
 }

@@ -155,3 +155,93 @@ div[idomkey="shadow"] {
 .ytContribIconHost::before {
     font-family: "YouTube Icons Outlined";
 }
+
+/* Live chat overlay */
+.tt-live-chat-overlay {
+  position: fixed;
+  right: 2vw;
+  bottom: 7vh;
+  width: 28vw;
+  height: 50vh;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 99999;
+  pointer-events: none;
+  font-family: sans-serif;
+  box-sizing: border-box;
+}
+
+.tt-live-chat-row {
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 12px;
+  padding: 0.6vh 1vw;
+  color: #fff;
+  font-size: 1.4vw;
+  line-height: 1.4;
+  opacity: 1;
+  transition: opacity 1s ease;
+  word-break: break-word;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.tt-live-chat-row:first-child {
+  margin-top: auto;
+}
+
+.tt-live-chat-row-hidden {
+  opacity: 0;
+}
+
+.tt-live-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.tt-live-chat-author {
+  font-weight: bold;
+}
+
+.tt-live-chat-message {
+  color: #eee;
+  margin-top: 2px;
+  word-wrap: break-word;
+}
+
+.tt-live-chat-badge-img {
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.3em;
+  vertical-align: -0.15em;
+}
+
+.tt-live-chat-author-photo {
+  display: inline-block;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.tt-live-chat-badge-dot {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tt-live-chat-emoji {
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.16em;
+  margin: 0 0.06em;
+}

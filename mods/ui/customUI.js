@@ -3,6 +3,7 @@
 import { extractAssignedFunctions } from "../utils/ASTParser.js";
 import { configRead } from "../config.js";
 import { ButtonRenderer } from "./ytUI.js";
+import { isLiveChatVisible, hasLiveChat } from "../features/liveChat.js";
 
 function applyPatches() {
     if (!window._yttv) return setTimeout(applyPatches, 250);
@@ -126,20 +127,21 @@ function applyPatches() {
             const origEngagementActionButton = inst[engagementActionButton];
             inst[engagementActionButton] = function () {
                 const res = origEngagementActionButton.apply(this, arguments);
-                // Find the comments button index to insert after it
-                const commentsIndex = res.findIndex(item => item.type === 'TRANSPORT_CONTROLS_BUTTON_TYPE_COMMENTS');
-                if (commentsIndex !== -1 && !res.find(item => item.type === 'TRANSPORT_CONTROLS_BUTTON_TYPE_CHAT_TOGGLE')) {
-                    res.splice(commentsIndex + 1, 0, {
+                if (!hasLiveChat()) return res;
+                const likeIndex = res.findIndex(item => item.type === 'TRANSPORT_CONTROLS_BUTTON_TYPE_LIKE_BUTTON');
+                const insertAt = likeIndex !== -1 ? likeIndex + 1 : 0;
+                if (!res.find(item => item.type === 'TRANSPORT_CONTROLS_BUTTON_TYPE_CHAT_TOGGLE')) {
+                    res.splice(insertAt, 0, {
                         type: 'TRANSPORT_CONTROLS_BUTTON_TYPE_CHAT_TOGGLE',
                         button: {
                             buttonRenderer: ButtonRenderer(
                                 false,
-                                "Toggle Chat",
-                                'COMMENT',
+                                'Toggle Chat',
+                                isLiveChatVisible() ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK',
                                 {
                                     customAction:
                                     {
-                                        action: 'TT_TOGGLE_CHAT',
+                                        action: 'TT_TOGGLE_CHAT'
                                     }
                                 }
                             )
