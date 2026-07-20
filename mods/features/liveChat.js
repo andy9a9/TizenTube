@@ -138,7 +138,7 @@ async function fetchChat(continuation, gen) {
     try {
         const body = { continuation };
         if (!isLive && fetchStartSecs > 0) {
-            body.videoOffsetTimeMsec = String(fetchStartSecs * 1000);
+            body.currentPlayerState = { playerOffsetMs: String(fetchStartSecs * 1000) };
         }
         const json = await apiPost(endpoint, body);
         if (gen !== fetchGeneration) return;
@@ -160,6 +160,11 @@ async function fetchChat(continuation, gen) {
             pollTimeout = setTimeout(() => fetchChat(nextToken, gen), 50);
         }
     } catch (e) {
+        // If 400 and we forced replay mode on a live stream, chat replay isn't available
+        if (e.message.includes('400') && forcedReplay) {
+            console.log('[LiveChat] replay not available for this live stream at this offset');
+            return;
+        }
         // If 400, the isLive guess was wrong — flip and retry with the other endpoint
         if (e.message.includes('400')) {
             isLive = !isLive;
@@ -330,8 +335,13 @@ function attachVideoListeners() {
     let lastKnownMs = 0;
     const onSeek = () => {
         const nowMs = video.currentTime * 1000;
-        if (nowMs < lastKnownMs - 5000) {
-            console.log('[LiveChat] backward seek to ' + nowMs.toFixed(0) + ' — re-fetching chat');
+        if (isLive) {
+            // Live stream: just clear displayed messages, live polling continues
+            const overlay = document.getElementById('tt-live-chat-overlay');
+            if (overlay) while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+            console.log('[LiveChat] seek on live — cleared messages');
+        } else if (nowMs < lastKnownMs - 5000) {
+            console.log('[LiveChat] backward seek to ' + nowMs.toFixed(0) + ' — re-fetching replay');
             stopAll();
             replayQueue = [];
             const seekSecs = Math.max(0, Math.floor(nowMs / 1000) - 5);

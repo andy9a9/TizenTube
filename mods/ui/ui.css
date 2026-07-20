@@ -166,7 +166,7 @@ div[idomkey="shadow"] {
   overflow-y: hidden;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   z-index: 99999;
   pointer-events: none;
   font-family: sans-serif;
@@ -188,6 +188,7 @@ div[idomkey="shadow"] {
   box-sizing: border-box;
   flex-shrink: 0;
   margin-top: auto;
+  margin-left: auto;
 }
 
 .tt-live-chat-row:first-child {
