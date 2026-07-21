@@ -4,7 +4,7 @@
 export const OVERLAY_ID = 'tt-live-chat-overlay';
 
 const MAX_MESSAGES = 10;
-const FADE_AFTER_MS = 20000;
+const FADE_AFTER_MS = 30000;
 
 export function createOverlay(visible) {
     let el = document.getElementById(OVERLAY_ID);

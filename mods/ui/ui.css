@@ -160,13 +160,13 @@ div[idomkey="shadow"] {
 .tt-live-chat-overlay {
   position: fixed;
   right: 2vw;
-  bottom: 7vh;
+  bottom: 12vh;
   width: 28vw;
-  height: 50vh;
+  top: 5vh;
   overflow-y: hidden;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   z-index: 99999;
   pointer-events: none;
   font-family: sans-serif;
@@ -187,7 +187,6 @@ div[idomkey="shadow"] {
   max-width: 100%;
   box-sizing: border-box;
   flex-shrink: 0;
-  margin-top: auto;
   margin-left: auto;
 }
 
