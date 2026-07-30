@@ -8,7 +8,10 @@ const FADE_AFTER_MS = 30000;
 
 export function createOverlay(visible) {
     let el = document.getElementById(OVERLAY_ID);
-    if (el) return el;
+    if (el) {
+        el.style.display = visible ? 'flex' : 'none';
+        return el;
+    }
 
     el = document.createElement('div');
     el.id = OVERLAY_ID;
