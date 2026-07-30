@@ -384,7 +384,16 @@ function getCurrentVideoId() {
 }
 
 function onVideoChange(videoId) {
-    if (!videoId || videoId === lastVideoId) return;
+    if (videoId === lastVideoId) return;
+    // Navigated away from video — clean up
+    if (!videoId) {
+        lastVideoId = null;
+        stopAll();
+        replayQueue = [];
+        chatAvailable = false;
+        setOverlayVisible(false);
+        return;
+    }
     lastVideoId = videoId;
     console.log('[LiveChat] video changed to', videoId);
     stopAll();
