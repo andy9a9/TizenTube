@@ -114,9 +114,13 @@ export function appendMessage(authorName, messageText, badgeInfo, messageParts, 
     row.appendChild(messageDiv);
 
     overlay.appendChild(row);
-    // Scroll to bottom so messages push up as whole units
+
+    // Keep removing oldest messages until content fits the container
+    while ((overlay.children.length > 1 && overlay.scrollHeight > overlay.clientHeight)
+        || (overlay.children.length > MAX_MESSAGES)) {
+        overlay.removeChild(overlay.firstChild);
+    }
     overlay.scrollTop = overlay.scrollHeight;
-    while (overlay.children.length > MAX_MESSAGES) overlay.removeChild(overlay.firstChild);
 
     setTimeout(() => {
         row.classList.add('tt-live-chat-row-hidden');

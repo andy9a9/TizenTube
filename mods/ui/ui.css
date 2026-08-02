@@ -201,7 +201,7 @@ div[idomkey="shadow"] {
 .tt-live-chat-header {
   display: flex;
   align-items: center;
-  gap: 0.4em;
+  gap: 0.6em;
 }
 
 .tt-live-chat-author {
